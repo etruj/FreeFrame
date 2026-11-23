@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeFrame</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<style>
+  :root { --bg: #f4f3ef; --card: #fff; --text: #1d1d1b; --muted: #6b6a66; --line: #e2e0da;
+    --accent: #2f6fde; --accent-text: #fff; --danger: #c8372d; --sel: rgba(47,111,222,.35); }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161616; --card: #222; --text: #eceae4; --muted: #9a9892; --line: #333;
+      --accent: #5b93f0; --accent-text: #fff; --danger: #e5574c; --sel: rgba(91,147,240,.4); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 18px 16px 60px; }
+  h1 { font-size: 24px; margin: 4px 0 2px; display: flex; align-items: center; gap: 10px; }
+  h1 .logo { width: 34px; height: 34px; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; padding: 12px 0; background: var(--bg); }
+  button, .btn { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 11px 18px;
+    cursor: pointer; background: var(--card); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .primary { background: var(--accent); color: var(--accent-text); box-shadow: none; }
+  .danger { background: var(--danger); color: #fff; box-shadow: none; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hidden { display: none !important; }
+  #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  #progress { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+    box-shadow: inset 0 0 0 1px var(--line); }
+  .track { height: 6px; border-radius: 3px; background: var(--line); margin-top: 8px; overflow: hidden; }
+  .fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #problems { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-line; }
+  #doublesWarn { color: #9a6200; font-size: 14px; margin-top: 6px; }
+  @media (prefers-color-scheme: dark) { #doublesWarn { color: #e8b04a; } }
+  #doublesWarn button { margin-top: 6px; padding: 7px 12px; font-size: 14px; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+  .tile { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer;
+    background: var(--line); -webkit-tap-highlight-color: transparent; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .check { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid #fff; background: rgba(0,0,0,.25); display: none; }
+  body.selecting .tile .check { display: block; }
+  .tile.sel::after { content: ""; position: absolute; inset: 0; background: var(--sel);
+    box-shadow: inset 0 0 0 3px var(--accent); border-radius: 8px; }
+  .tile.sel .check { background: var(--accent); border-color: #fff; z-index: 1; }
+  .tile.sel .check::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .tile.video::before { content: ""; position: absolute; left: 8px; bottom: 8px; z-index: 1;
+    border: solid transparent; border-width: 8px 0 8px 14px; border-left-color: #fff;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); }
+  .tile.motion::before { content: ""; position: absolute; left: 8px; bottom: 8px; z-index: 1;
+    width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.45);
+    filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); }
+  .empty { text-align: center; color: var(--muted); padding: 50px 10px; }
+
+  details { margin-top: 30px; background: var(--card); border-radius: 12px; padding: 4px 16px;
+    box-shadow: inset 0 0 0 1px var(--line); }
+  summary { font-weight: 600; padding: 12px 0; cursor: pointer; }
+  label.f { display: block; margin: 12px 0; font-size: 14px; color: var(--muted); }
+  label.f input[type=url], label.f input[type=number], label.f input[type=time], label.f select {
+    display: block; width: 100%; margin-top: 4px; font: inherit; color: var(--text); padding: 9px 10px;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+  label.f input[type=range] { display: block; width: 100%; margin-top: 8px; accent-color: var(--accent); }
+  .val { color: var(--text); font-weight: 600; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  .check-line { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+  #saved { color: var(--muted); font-size: 14px; margin-left: 10px; }
+  .foot { color: var(--muted); font-size: 13px; margin-top: 24px; }
+  #help { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.55); display: flex;
+    align-items: center; justify-content: center; padding: 16px; }
+  #help .box { background: var(--card); color: var(--text); border-radius: 14px; padding: 18px 20px;
+    max-width: 520px; max-height: 90vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+  #help h2 { font-size: 19px; margin: 0 0 8px; }
+  #help h3 { font-size: 15px; margin: 14px 0 4px; }
+  #help p, #help li { font-size: 14px; margin: 4px 0; }
+  #help ul { padding-left: 20px; margin: 4px 0; }
+  #helpWhy { color: var(--danger); font-size: 14px; white-space: pre-line; }
+  body.drag main { outline: 3px dashed var(--accent); outline-offset: -8px; border-radius: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="/icon.png" alt="" class="logo">FreeFrame</h1>
+  <div class="sub" id="summary">Loading…</div>
+
+  <div class="bar">
+    <span id="normalBar">
+      <label class="btn primary" for="file">Add photos or videos</label>
+      <input type="file" id="file" accept="image/*,video/*" multiple>
+      <button id="selectBtn">Select</button>
+      <button id="doublesBtn">Find doubles</button>
+    </span>
+    <span id="selectBar" class="hidden">
+      <button id="nextBtn" disabled>Show next</button>
+      <button id="downloadBtn" disabled>Download</button>
+      <button id="deleteBtn" class="danger" disabled>Delete</button>
+      <button id="allBtn">Select all</button>
+      <button id="cancelBtn">Done</button>
+    </span>
+  </div>
+
+  <div id="progress" class="hidden">
+    <div id="progressText"></div>
+    <div class="track"><div class="fill" id="progressFill"></div></div>
+    <div id="problems"></div>
+    <div id="doublesWarn" class="hidden">
+      <div id="doublesText"></div>
+      <button id="reviewDoubles">Find doubles</button>
+    </div>
+  </div>
+
+  <div id="converting" class="sub hidden" style="margin-bottom:10px"></div>
+  <div id="doublesNote" class="sub hidden" style="margin-bottom:10px"></div>
+  <div id="nextNote" class="sub hidden" style="margin-bottom:10px"></div>
+  <div id="grid"></div>
+
+  <details id="settings">
+    <summary>Settings</summary>
+    <label class="f">Cozi calendar link
+      <input type="url" id="icsUrl" placeholder="https://rest.cozi.com/api/ext/…/feed.ics">
+    </label>
+    <div class="sub" id="calStatus"></div>
+    <div class="row">
+      <label class="f">Seconds per photo <input type="number" id="seconds" min="5" max="3600"></label>
+      <label class="f">Days of calendar <input type="number" id="days" min="1" max="31"></label>
+    </div>
+    <label class="f">Screen brightness <span class="val" id="brightVal"></span>
+      <input type="range" id="brightness" min="1" max="100">
+    </label>
+    <div class="sub">Changes the tablet right away, the same as the brightness slider in its top bar.</div>
+    <label class="f">Brightness during the dim hours <span class="val" id="nightVal"></span>
+      <input type="range" id="nightBright" min="1" max="100">
+    </label>
+    <div class="sub" id="nightNote"></div>
+    <div class="row">
+      <label class="f">Dim screen from <input type="time" id="nightStart"></label>
+      <label class="f">until <input type="time" id="nightEnd"></label>
+    </div>
+    <div class="sub">The rest of the time the screen brightness above is used. Clear both times to never dim.</div>
+    <label class="check-line"><input type="checkbox" id="shuffle"> Shuffle photos</label>
+    <label class="check-line"><input type="checkbox" id="showClock"> Show the clock and date on the frame</label>
+    <label class="f">Keep photos on
+      <select id="storage">
+        <option value="internal">The tablet</option>
+        <option value="sd">SD card</option>
+      </select>
+    </label>
+    <div class="sub" id="storageStatus"></div>
+    <p><button class="primary" id="saveBtn">Save settings</button><span id="saved"></span></p>
+  </details>
+
+  <div class="foot" id="foot"></div>
+</main>
+
+<div id="help" class="hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="box">
+    <h2 id="helpTitle">Some videos couldn't be added</h2>
+    <div id="helpWhy"></div>
+    <p>The frame plays videos up to 1080p (Full HD). It converts "High Efficiency" (HEVC) videos by itself,
+      and this page makes a smaller copy of 4K videos before sending them, but that needs a browser that can
+      play the video and the page kept open while it does. Changing two camera settings on the phone makes
+      every new video work as it is, with nothing to wait for:</p>
+    <h3>iPhone</h3>
+    <ul>
+      <li>Settings → Camera → Formats → choose <b>Most Compatible</b>.</li>
+      <li>Settings → Camera → Record Video → choose <b>1080p</b> (not 4K).</li>
+    </ul>
+    <h3>Samsung Galaxy</h3>
+    <ul>
+      <li>Camera → ⚙ Settings → Advanced video options → turn off <b>High efficiency videos</b> and
+        <b>HDR10+ video</b> (10-bit HDR videos are too much for the frame).</li>
+      <li>Back in the camera, set the video size to <b>FHD</b> or <b>1080p</b> (not UHD / 4K).</li>
+    </ul>
+    <h3>Google Pixel and other Android phones</h3>
+    <ul>
+      <li>Camera settings → Video → set the video codec to <b>H.264</b>, or turn off "More efficient video" / "H.265".</li>
+      <li>Set the resolution to <b>1080p</b>.</li>
+    </ul>
+    <h3>A video you already took</h3>
+    <p>Most phones' photo apps can save a smaller copy (on iPhone: share it as "Most Compatible"; on Android:
+      Edit → Save as copy, or share it at a lower resolution). On a computer, the free HandBrake app's
+      "Fast 1080p30" preset makes a file that works.</p>
+    <p><button class="primary" id="helpClose">OK</button></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var photos = [], selected = {}, selecting = false, busy = false;
+
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method, cache: 'no-store',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t || r.status); });
+      return r.json();
+    });
+  }
+  function path(name) { return name.split('/').map(encodeURIComponent).join('/'); }
+  function size(bytes) {
+    return bytes > 1e9 ? (bytes / 1e9).toFixed(1) + ' GB' : Math.round(bytes / 1e6) + ' MB';
+  }
+  function ago(ms) {
+    var m = Math.round((Date.now() - ms) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago';
+  }
+
+  // ---- help for videos the frame can't use
+  function showHelp(lines) {
+    $('helpWhy').textContent = lines.join('\n');
+    $('help').classList.remove('hidden');
+  }
+  $('helpClose').onclick = function () { $('help').classList.add('hidden'); };
+  $('help').onclick = function (e) { if (e.target === this) this.classList.add('hidden'); };
+
+  // ---- possible doubles are always added; this only points them out
+  var doubles = [];
+  function warnDouble(name, like) {
+    doubles.push(name + ' looks like ' + like);
+    $('doublesText').textContent = 'Added, but ' + (doubles.length === 1 ? 'this looks' : 'these look') +
+      ' like ' + (doubles.length === 1 ? 'a photo' : 'photos') + ' already on the frame: ' + doubles.join('; ') +
+      '. Find doubles shows them side by side so you can choose what to keep.';
+    $('doublesWarn').classList.remove('hidden');
+    $('progress').classList.remove('hidden');
+  }
+  $('reviewDoubles').onclick = function () { $('doublesBtn').click(); };
+
+  // ---- HEVC videos are converted on the tablet after they arrive
+  var shownProblems = null, watching = false, convertingNow = 0;
+  function watchConversions() {
+    if (watching) return;
+    watching = true;
+    setTimeout(function poll() {
+      load().then(function () {
+        if (convertingNow) setTimeout(poll, 3000); else watching = false;
+      }, function () { setTimeout(poll, 5000); });
+    }, 1500);
+  }
+  function conversionNews(r) {
+    convertingNow = r.converting || 0;
+    $('converting').textContent = convertingNow ? 'Converting ' + convertingNow +
+      (convertingNow === 1 ? ' item' : ' items') + ' (HEIC photos, High Efficiency videos) for the frame. ' +
+      'Photos take seconds, videos about as long as they last; you can close this page.' : '';
+    $('converting').classList.toggle('hidden', !convertingNow);
+    if (convertingNow) watchConversions();
+    var all = r.convertProblems || [];
+    if (shownProblems === null) {  // only report what goes wrong while this page is open
+      shownProblems = Math.max.apply(null, [0].concat(all.map(function (p) { return p.time; })));
+    }
+    var fresh = all.filter(function (p) { return p.time > shownProblems; });
+    if (fresh.length) shownProblems = Math.max.apply(null, fresh.map(function (p) { return p.time; }));
+    fresh.forEach(function (p) { if (p.lookAlike) warnDouble(p.name, p.lookAlike); });
+    fresh = fresh.filter(function (p) { return !p.lookAlike; });
+    if (fresh.length) {
+      showHelp(fresh.map(function (p) {
+        return p.name + (p.clip ? ' (its moving part)' : '') + ': could not be converted: ' + p.reason + '.';
+      }));
+    }
+  }
+
+  // ---- the photo grid
+  function load() {
+    return api('GET', '/api/photos').then(function (r) {
+      conversionNews(r);
+      photos = r.photos;
+      var nv = photos.filter(function (p) { return p.video; }).length, np = photos.length - nv;
+      $('summary').textContent = np + (np === 1 ? ' photo' : ' photos') +
+        (nv ? ', ' + nv + (nv === 1 ? ' video' : ' videos') : '') +
+        ' · ' + size(r.free) + ' free on the ' + (r.onSd ? 'SD card' : 'tablet');
+      var alive = {};
+      photos.forEach(function (p) { alive[p.name] = 1; });
+      Object.keys(selected).forEach(function (n) { if (!alive[n]) delete selected[n]; });
+      render();
+    });
+  }
+  var only = null;  // names to show while reviewing doubles, else null for all
+  function render() {
+    var grid = $('grid');
+    var shown = only ? photos.filter(function (p) { return only[p.name]; }) : photos;
+    if (!photos.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Nothing here yet.<br>Tap <b>Add photos or videos</b>' +
+        ' or drop them on this page.</div>';
+    } else {
+      grid.innerHTML = shown.map(function (p) {
+        return '<div class="tile' + (p.video ? ' video' : p.motion ? ' motion' : '') + (selected[p.name] ? ' sel' : '') + '" data-name="' +
+          p.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"><img loading="lazy" alt="" src="/thumb/' +
+          path(p.name) + '?v=' + p.mtime + '"><span class="check"></span></div>';
+      }).join('');
+    }
+    var n = Object.keys(selected).length;
+    $('deleteBtn').textContent = n ? 'Delete ' + n : 'Delete';
+    $('deleteBtn').disabled = !n;
+    $('downloadBtn').textContent = n > 1 ? 'Download ' + n : 'Download';
+    $('downloadBtn').disabled = !n;
+    $('nextBtn').disabled = !n;
+    $('selectBtn').disabled = !photos.length;
+  }
+  $('grid').addEventListener('click', function (e) {
+    var tile = e.target.closest('.tile');
+    if (!tile) return;
+    if (!selecting) setSelecting(true);
+    var name = tile.getAttribute('data-name');
+    if (selected[name]) delete selected[name]; else selected[name] = 1;
+    render();
+  });
+  function setSelecting(on) {
+    selecting = on;
+    if (!on) {
+      selected = {};
+      only = null;
+      $('doublesNote').classList.add('hidden');
+    }
+    document.body.classList.toggle('selecting', on);
+    $('normalBar').classList.toggle('hidden', on);
+    $('selectBar').classList.toggle('hidden', !on);
+    render();
+  }
+  $('selectBtn').onclick = function () { setSelecting(true); };
+  // Look-alike sets on the frame: shows only those, with all but the oldest
+  // of each set selected, ready to check and delete.
+  $('doublesBtn').onclick = function () {
+    $('doublesBtn').disabled = true;
+    $('doublesBtn').textContent = 'Looking…';
+    api('GET', '/api/duplicates').then(function (r) {
+      if (!r.groups.length) {
+        alert('No doubles found: every photo and video on the frame looks different.');
+        return;
+      }
+      only = {};
+      selected = {};
+      r.groups.forEach(function (g) {
+        g.forEach(function (name, k) { only[name] = 1; if (k > 0) selected[name] = 1; });
+      });
+      setSelecting(true);
+      var n = Object.keys(selected).length;
+      $('doublesNote').textContent = r.groups.length + (r.groups.length === 1 ? ' set' : ' sets') +
+        ' of look-alikes. The ' + (n === 1 ? 'newer copy is' : n + ' newer copies are') +
+        ' selected: check them, then Delete, or Done to keep everything.';
+      $('doublesNote').classList.remove('hidden');
+      render();
+    }).catch(function (e) { alert('Could not check: ' + e.message); }).then(function () {
+      $('doublesBtn').disabled = false;
+      $('doublesBtn').textContent = 'Find doubles';
+    });
+  };
+  $('cancelBtn').onclick = function () { setSelecting(false); };
+  $('allBtn').onclick = function () {
+    var visible = only ? photos.filter(function (p) { return only[p.name]; }) : photos;  // never hidden ones
+    var all = visible.length && Object.keys(selected).length === visible.length;
+    selected = {};
+    if (!all) visible.forEach(function (p) { selected[p.name] = 1; });
+    render();
+  };
+  // Saves the selected photos and videos to this device, one after another
+  // (the browser may ask once whether to allow several downloads).
+  $('downloadBtn').onclick = function () {
+    var names = Object.keys(selected);
+    names.forEach(function (name, i) {
+      setTimeout(function () {
+        var a = document.createElement('a');
+        a.href = '/orig/' + path(name) + '?download=1';
+        a.download = name.split('/').pop();
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, i * 800);
+    });
+  };
+  // Puts the selection at the front of the frame's queue, in the order tapped.
+  var nextNoteTimer = null;
+  $('nextBtn').onclick = function () {
+    var names = Object.keys(selected);
+    api('POST', '/api/next', { names: names }).then(function (r) {
+      setSelecting(false);
+      var n = r.names.length;
+      $('nextNote').textContent = (n === 1 ? 'Coming up next on the frame' : 'These ' + n + ' are coming up next on the frame') +
+        ', once the one on screen now has had its turn.';
+      $('nextNote').classList.remove('hidden');
+      clearTimeout(nextNoteTimer);
+      nextNoteTimer = setTimeout(function () { $('nextNote').classList.add('hidden'); }, 8000);
+    }).catch(function (e) { alert('Could not reach the frame: ' + e.message); });
+  };
+  $('deleteBtn').onclick = function () {
+    var names = Object.keys(selected);
+    if (!names.length || !confirm('Delete ' + names.length + (names.length === 1 ? ' item' : ' items') +
+        ' from the frame? This can\'t be undone.')) return;
+    api('POST', '/api/delete', { names: names }).then(function () {
+      setSelecting(false);
+      return load();
+    }).catch(function (e) { alert('Delete failed: ' + e.message); });
+  };
+
+  // ---- uploads: each photo is shrunk to 2048 px on this device first, which
+  // also turns iPhone HEIC photos into JPEG wherever the browser can read them.
+  // Videos go as they are; they play on the frame without sound.
+  var MAX = 2048;
+  function base(f) { return (f.name || '').replace(/\.[^.]*$/, '').toLowerCase(); }
+  function isVideo(f) { return /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm)$/i.test(f.name || ''); }
+  function prepare(file) {
+    return new Promise(function (resolve) {
+      var keep = { blob: file, name: file.name || 'photo.jpg' };
+      if (file.type === 'image/gif' || isVideo(file)) return resolve(keep);
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight, s = Math.min(1, MAX / Math.max(w, h));
+        if (s === 1 && file.type === 'image/jpeg') { URL.revokeObjectURL(url); return resolve(keep); }
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * s);
+        c.height = Math.round(h * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) {
+          resolve(b ? { blob: b, name: keep.name.replace(/\.[^.]*$/, '') + '.jpg' } : keep);
+        }, 'image/jpeg', 0.9);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(keep); };
+      img.src = url;
+    });
+  }
+  // Android "motion photos" are a picture with a short video stuck on the
+  // end of the same file. Find that video so it can be sent along.
+  function embeddedVideo(file) {
+    return new Promise(function (resolve) {
+      if (file._clip) return resolve(file._clip);
+      if (!/\.(jpe?g|hei[cf])$/i.test(file.name || '') && !/image\/(jpeg|hei[cf])/.test(file.type)) return resolve(null);
+      var r = new FileReader();
+      r.onerror = function () { resolve(null); };
+      r.onload = function () {
+        var b = new Uint8Array(r.result);
+        for (var i = 64; i < b.length - 12; i++) {  // an MP4 starts: 4-byte size, then "ftyp"
+          if (b[i] === 0x66 && b[i + 1] === 0x74 && b[i + 2] === 0x79 && b[i + 3] === 0x70 &&
+              b[i - 4] === 0 && b[i - 3] === 0 && b[i - 2] === 0 && b[i - 1] >= 8) {
+            return resolve(file.slice(i - 4, b.length, 'video/mp4'));
+          }
+        }
+        resolve(null);
+      };
+      r.readAsArrayBuffer(file);
+    });
+  }
+  // ---- videos larger than the frame can play (4K, or 1440 lines and up) are
+  // made smaller on this device first: the browser plays the video once, muted
+  // and out of sight, draws it at 1280 px and records that. Takes as long as
+  // the video lasts. The tablet's own chip can't read anything over 1080p.
+  var OUT = 1280;
+  function videoInfo(blob) {
+    return new Promise(function (resolve) {
+      var v = document.createElement('video'), url = URL.createObjectURL(blob), t;
+      function done(r) { clearTimeout(t); v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url); resolve(r); }
+      v.muted = true; v.preload = 'metadata'; v.playsInline = true;
+      v.onloadedmetadata = function () {
+        done(v.videoWidth ? { w: v.videoWidth, h: v.videoHeight, duration: v.duration } : null);
+      };
+      v.onerror = function () { done(null); };  // this browser can't read it; the tablet may still
+      t = setTimeout(function () { done(null); }, 15000);
+      v.src = url;
+    });
+  }
+  function recorderType() {
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+    var types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp8', 'video/webm'];
+    for (var i = 0; i < types.length; i++) if (MediaRecorder.isTypeSupported(types[i])) return types[i];
+    return null;
+  }
+  function shrinkVideo(item, info, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var type = recorderType();
+      if (!type) return reject(new Error('this browser can\'t make a smaller copy'));
+      var s = Math.min(1, OUT / Math.max(info.w, info.h));
+      var c = document.createElement('canvas');
+      c.width = Math.round(info.w * s / 2) * 2;
+      c.height = Math.round(info.h * s / 2) * 2;
+      var g = c.getContext('2d'), v = document.createElement('video'), url = URL.createObjectURL(item.blob);
+      v.muted = true; v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      // Shown small in the progress box: phones pause videos nobody can see.
+      v.style.cssText = 'display:block;max-width:180px;max-height:120px;margin-top:10px;border-radius:6px;background:#000';
+      $('progress').appendChild(v);
+      var rec = new MediaRecorder(c.captureStream(30), { mimeType: type, videoBitsPerSecond: 4000000 });
+      var chunks = [], finished = false, lastTime = -1, lastMove = Date.now(), guard;
+      function cleanup() {
+        finished = true;
+        clearInterval(guard);
+        document.removeEventListener('visibilitychange', onVisible);
+        v.pause(); v.removeAttribute('src'); v.load(); v.remove(); URL.revokeObjectURL(url);
+      }
+      function fail(msg) {
+        if (finished) return;
+        cleanup();
+        try { rec.stop(); } catch (e) {}
+        reject(new Error(msg));
+      }
+      function draw() {
+        if (finished) return;
+        g.drawImage(v, 0, 0, c.width, c.height);
+        if (info.duration) onProgress(Math.min(1, v.currentTime / info.duration));
+        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw); else requestAnimationFrame(draw);
+      }
+      // Phones pause video when the page is hidden: pause the recording too.
+      function onVisible() {
+        if (finished) return;
+        if (document.hidden) { if (rec.state === 'recording') rec.pause(); }
+        else { if (rec.state === 'paused') rec.resume(); v.play(); lastMove = Date.now(); }
+      }
+      document.addEventListener('visibilitychange', onVisible);
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        if (!finished) cleanup();
+        var blob = new Blob(chunks, { type: type.split(';')[0] });
+        if (!blob.size) return reject(new Error('the smaller copy came out empty'));
+        resolve({ blob: blob, name: item.name.replace(/\.[^.]*$/, '') + (/mp4/.test(type) ? '.mp4' : '.webm'), shrunk: true });
+      };
+      v.onended = function () { if (finished) return; cleanup(); setTimeout(function () { rec.stop(); }, 300); };
+      v.onerror = function () { fail('this browser can\'t play it to make a smaller copy'); };
+      guard = setInterval(function () {
+        if (document.hidden) return;
+        if (v.currentTime !== lastTime) { lastTime = v.currentTime; lastMove = Date.now(); }
+        else if (Date.now() - lastMove > 20000) fail('making the smaller copy got stuck');
+      }, 1000);
+      v.src = url;
+      v.onloadeddata = function () {
+        v.onloadeddata = null;
+        g.drawImage(v, 0, 0, c.width, c.height);
+        rec.start(1000);
+        var p = v.play();
+        if (p && p.catch) p.catch(function () { fail('this browser would not play it to make a smaller copy'); });
+        draw();
+      };
+    });
+  }
+  function tooBig(info) { return Math.max(info.w, info.h) > 1920 || Math.min(info.w, info.h) > 1088; }
+  // The video as it is when the frame can take it, else a smaller copy.
+  // force: the tablet already turned it down, so try a copy whatever its size.
+  function fitVideo(item, force, onProgress) {
+    return videoInfo(item.blob).then(function (info) {
+      report(item.name + ': ' + mb(item.blob.size) + ' ' + (item.blob.type || 'no type') + ', ' +
+        (info ? info.w + 'x' + info.h + ', ' + Math.round(info.duration) + ' s' : 'this browser can\'t read it') +
+        (force ? ' (again, after the tablet refused it)' : ''));
+      if (!info || !(force || tooBig(info))) return item;
+      var t0 = Date.now();
+      report(item.name + ': making a smaller copy as ' + recorderType());
+      return shrinkVideo(item, info, onProgress).then(function (small) {
+        report(item.name + ': smaller copy ' + mb(small.blob.size) + ' in ' + Math.round((Date.now() - t0) / 1000) + ' s');
+        return small;
+      }, function (e) {
+        report(item.name + ': smaller copy failed: ' + e.message);
+        if (force) throw e;
+        return item;  // let the tablet say what's wrong with it
+      });
+    });
+  }
+  // ---- uploads go in 2 MB pieces. When a phone drops the connection (screen
+  // off, Wi-Fi hiccup, switching apps) the page waits until it is back in
+  // view, asks the tablet how much it has, and carries on from there.
+  var PIECE = 2 * 1024 * 1024;
+  function mb(n) { return (n / 1048576).toFixed(1) + ' MB'; }
+  function report(msg) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('POST', '/api/log');
+      x.setRequestHeader('Content-Type', 'text/plain');
+      x.send(String(msg).slice(0, 3000));
+    } catch (e) {}
+  }
+  function post(url, body, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var x = new XMLHttpRequest();
+      x.open('POST', url);
+      x.timeout = 120000;
+      x.upload.onprogress = function (e) { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      x.onload = function () {
+        if (x.status === 200) return resolve(JSON.parse(x.responseText));
+        var e = new Error(x.responseText || 'HTTP ' + x.status);
+        e.status = x.status;
+        reject(e);
+      };
+      x.onerror = x.ontimeout = x.onabort = function () { reject(new Error('lost connection to the tablet')); };
+      x.send(body);
+    });
+  }
+  function whenVisible() {
+    return new Promise(function (resolve) {
+      if (!document.hidden) return resolve();
+      document.addEventListener('visibilitychange', function on() {
+        if (document.hidden) return;
+        document.removeEventListener('visibilitychange', on);
+        resolve();
+      });
+    });
+  }
+  function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function speed(bytes, ms) { return ms > 0 ? (bytes / 1048576 / (ms / 1000)).toFixed(2) + ' MB/s' : '-'; }
+  function readPiece(blob, start, end) {
+    var part = blob.slice(start, end);
+    if (part.arrayBuffer) return part.arrayBuffer();
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(new Error('could not read the file on this device')); };
+      r.readAsArrayBuffer(part);
+    });
+  }
+  // How fast this device reaches the tablet, for the upload log.
+  function networkCheck() {
+    var data = new Uint8Array(1048576), t0 = Date.now();
+    for (var i = 0; i < data.length; i += 4096) data[i] = i & 255;
+    return post('/api/ping', data, function () {}).then(function () {
+      report('network check: 1 MB to the tablet in ' + (Date.now() - t0) + ' ms (' + speed(1048576, Date.now() - t0) + ')');
+    }, function (e) { report('network check failed: ' + e.message); });
+  }
+  function send(item, onProgress, motionFor) {
+    var total = item.blob.size, offset = 0, failures = 0;
+    var id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).replace(/[^a-z0-9]/g, '');
+    var url = '/api/upload?name=' + encodeURIComponent(item.name) +
+      (motionFor ? '&motionFor=' + encodeURIComponent(motionFor) : '') + '&id=' + id + '&total=' + total;
+    var readMs = 0, sendMs = 0, moved = 0, pieces = 0, slowNote = null;
+    function piece() {
+      var end = Math.min(total, offset + PIECE), start = offset, t0 = Date.now(), t1;
+      // The piece is read from the phone first, then sent: a slow read (a video
+      // the phone has to fetch from the cloud) then can't stall the connection.
+      clearTimeout(slowNote);
+      slowNote = setTimeout(function () {
+        $('progressText').textContent = 'Reading the video from this device is slow. If it is stored online ' +
+          '(Google Photos, iCloud), saving it to the device first is much quicker.';
+      }, 15000);
+      return readPiece(item.blob, start, end).then(function (buf) {
+        clearTimeout(slowNote);
+        t1 = Date.now();
+        readMs += t1 - t0;
+        return post(url + '&offset=' + start, buf, function (f) {
+          onProgress(total ? (start + f * (end - start)) / total : 1);
+        });
+      }).then(function (r) {
+        sendMs += Date.now() - t1;
+        moved += end - start;
+        if (++pieces === 1 || pieces % 5 === 0 || r.name) {
+          report(item.name + ': ' + mb(r.name ? total : r.have) + ' of ' + mb(total) + ' on the tablet; reading ' +
+            speed(moved, readMs) + ', sending ' + speed(moved, sendMs));
+        }
+        if (r.name) return r;  // all there: the tablet has added it
+        failures = 0;
+        offset = r.have;
+        return piece();
+      }, function (e) {
+        clearTimeout(slowNote);
+        if (e.status && e.status < 500) throw e;  // the tablet said no (not playable, too large, no room)
+        if (++failures > 15) {
+          report(item.name + ': gave up at ' + mb(offset) + ' of ' + mb(total) + ': ' + e.message);
+          throw new Error('the connection to the frame kept dropping (got ' + mb(offset) + ' of ' + mb(total) + ')');
+        }
+        report(item.name + ': piece at ' + mb(start) + ' of ' + mb(total) + ' failed (' + e.message + '), try ' +
+          failures + (document.hidden ? ', page hidden' : ''));
+        var before = $('progressText').textContent;
+        $('progressText').textContent = 'The connection to the frame dropped. Carrying on where it stopped…';
+        return whenVisible().then(function () {
+          return pause(Math.min(15000, 1000 * Math.pow(2, failures - 1)));
+        }).then(function () {
+          return api('GET', '/api/upload?id=' + id);
+        }).then(function (st) { offset = st.have; }, function () {}).then(function () {
+          $('progressText').textContent = before;
+          return piece();
+        });
+      });
+    }
+    return piece();
+  }
+  function upload(files) {
+    files = Array.prototype.filter.call(files, function (f) {
+      return /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(f.name) || isVideo(f);
+    });
+    if (!files.length || busy) return;
+    // An iPhone Live Photo exported in full is a picture and a video with
+    // the same name: keep them together as one live photo.
+    var stills = {};
+    files.forEach(function (f) { if (!isVideo(f)) stills[base(f)] = f; });
+    files = files.filter(function (f) {
+      var s = isVideo(f) && stills[base(f)];
+      if (s) s._clip = f;
+      return !s;
+    });
+    busy = true;
+    var done = 0, problems = [], videoTrouble = false;
+    doubles = [];
+    $('doublesWarn').classList.add('hidden');
+    report('adding ' + files.length + ' files from ' + navigator.userAgent);
+    if (files.some(isVideo)) networkCheck();
+    $('progress').classList.remove('hidden');
+    $('problems').textContent = '';
+    function step(i) {
+      if (i >= files.length) {
+        busy = false;
+        $('progressText').textContent = 'Added ' + done + ' of ' + files.length + '.';
+        $('progressFill').style.width = '100%';
+        $('problems').textContent = problems.length ? 'Not added:\n' + problems.join('\n') : '';
+        problems.forEach(function (p) { report('not added: ' + p); });
+        if (videoTrouble) showHelp(problems);
+        if (!problems.length && !doubles.length) setTimeout(function () { if (!busy) $('progress').classList.add('hidden'); }, 4000);
+        return load();
+      }
+      var label = (isVideo(files[i]) ? 'video ' : 'photo ') + (i + 1) + ' of ' + files.length;
+      $('progressText').textContent = 'Adding ' + label + '…';
+      function bar(f) { $('progressFill').style.width = ((i + f) / files.length * 100) + '%'; }
+      function shrinking(f) {
+        $('progressText').textContent = 'Making a smaller copy of ' + label + ' that the frame can play: ' +
+          Math.round(f * 100) + '%. Keep this page open.';
+        bar(f);
+      }
+      function sending(f) {
+        $('progressText').textContent = 'Adding ' + label + '…';
+        bar(f);
+      }
+      // A live / motion photo's clip is made ready before its still is sent,
+      // so the frame finds both together.
+      var clipReady = isVideo(files[i]) ? Promise.resolve(null) : embeddedVideo(files[i]).then(function (clip) {
+        return clip && fitVideo({ blob: clip, name: 'clip.mp4' }, false, function () {});
+      });
+      return prepare(files[i]).then(function (item) {
+        return isVideo(files[i]) ? fitVideo(item, false, shrinking) : item;
+      }).then(function (item) {
+        return clipReady.then(function () { return item; });
+      }).then(function (item) {
+        return send(item, sending).catch(function (e) {
+          // Turned down by the tablet: a copy made here may still work.
+          if (!isVideo(files[i]) || item.shrunk || !/not added/.test(e.message)) throw e;
+          return fitVideo(item, true, shrinking).then(function (small) {
+            return small.shrunk ? send(small, sending) : Promise.reject(e);
+          }, function () { throw e; });
+        });
+      }).then(function (saved) {
+        done++;
+        if (saved.lookAlike) {
+          warnDouble(saved.name, saved.lookAlike);
+          report('added ' + saved.name + ', which looks like ' + saved.lookAlike);
+        }
+        if (saved.converting) watchConversions();
+        if (isVideo(files[i])) return;
+        // The moving part is a bonus: if the tablet can't play it, the still stays.
+        return clipReady.then(function (clip) {
+          if (clip) return send(clip, function () {}, saved.name).then(function (r) {
+            if (r.converting) watchConversions();
+          }, function (e) {
+            problems.push((files[i].name || 'file') + ' (its moving part): ' + e.message);
+            videoTrouble = true;
+          });
+        });
+      }).then(function () {
+        if (i % 4 === 3) load();
+      }, function (e) {
+        problems.push((files[i].name || 'file') + ': ' + e.message);
+        if (isVideo(files[i])) videoTrouble = true;
+      }).then(function () { return step(i + 1); });
+    }
+    step(0);
+  }
+  $('file').onchange = function () { upload(this.files); this.value = ''; };
+  document.addEventListener('dragover', function (e) { e.preventDefault(); document.body.classList.add('drag'); });
+  document.addEventListener('dragleave', function (e) {
+    if (!e.relatedTarget) document.body.classList.remove('drag');
+  });
+  document.addEventListener('drop', function (e) {
+    e.preventDefault();
+    document.body.classList.remove('drag');
+    upload(e.dataTransfer.files);
+  });
+
+  // ---- settings
+  function loadSettings() {
+    return api('GET', '/api/settings').then(function (s) {
+      $('icsUrl').value = s.icsUrl;
+      $('seconds').value = s.secondsPerPhoto;
+      $('days').value = s.daysAhead;
+      $('nightStart').value = s.nightStart;
+      $('nightEnd').value = s.nightEnd;
+      $('shuffle').checked = s.shuffle;
+      if (!draggingBright) { $('brightness').value = s.brightness; $('brightVal').textContent = s.brightness + '%'; }
+      $('nightBright').value = s.nightBrightness;
+      $('nightVal').textContent = s.nightBrightness + '%';
+      $('nightNote').textContent = s.nightNow
+        ? 'The frame is in its dim hours now, so this is the brightness showing. Saved and shown within a minute.'
+        : 'Used between the times below; saved and shown within a minute.';
+      $('showClock').checked = s.showClock;
+      $('calStatus').textContent = !s.icsUrl ? 'No calendar set: the frame shows photos only.'
+        : s.calendarError ? 'Calendar problem: ' + s.calendarError
+        : s.calendarUpdated ? 'Calendar updated ' + ago(s.calendarUpdated) + '.' : 'Calendar not loaded yet.';
+      $('storage').value = s.storage;
+      $('storage').options[1].disabled = !s.sdAvailable;
+      $('storage').options[1].textContent = s.sdAvailable ? 'SD card' : 'SD card (none in the tablet)';
+      $('storageStatus').textContent = (s.storage === 'sd' && !s.onSd
+        ? 'The SD card is missing, so the frame is using the tablet\'s own storage until it is back. '
+        : s.sdAvailable ? 'Changing this moves the photos already on the frame. '
+        : 'Put a card in the tablet and reload this page to choose it. ') + s.storageNote;
+      $('foot').textContent = 'Photos are kept on the ' + (s.onSd ? 'SD card' : 'tablet') + ' in ' + s.folder +
+        (s.onSd ? '.' : '. You can also copy them there over USB.');
+      if (/^Moving/.test(s.storageNote)) setTimeout(function () { loadSettings(); load(); }, 2000);
+    });
+  }
+  // Brightness changes apply as the slider moves, no Save needed.
+  var draggingBright = false, brightTimer = null;
+  $('brightness').oninput = function () {
+    draggingBright = true;
+    $('brightVal').textContent = this.value + '%';
+    clearTimeout(brightTimer);
+    var level = +this.value;
+    brightTimer = setTimeout(function () {
+      api('POST', '/api/brightness', { level: level }).catch(function (e) {
+        $('brightVal').textContent = 'not changed: ' + e.message;
+      });
+    }, 150);
+  };
+  $('brightness').onchange = function () { draggingBright = false; };
+  $('nightBright').oninput = function () { $('nightVal').textContent = this.value + '%'; };
+  $('nightBright').onchange = function () {
+    api('POST', '/api/settings', { nightBrightness: +this.value }).then(loadSettings);
+  };
+  $('saveBtn').onclick = function () {
+    $('saved').textContent = 'Saving…';
+    api('POST', '/api/settings', {
+      icsUrl: $('icsUrl').value,
+      secondsPerPhoto: +$('seconds').value || 30,
+      daysAhead: +$('days').value || 7,
+      nightStart: $('nightStart').value,
+      nightEnd: $('nightEnd').value,
+      shuffle: $('shuffle').checked,
+      showClock: $('showClock').checked,
+      storage: $('storage').value
+    }).then(function () {
+      $('saved').textContent = 'Saved. The frame picks it up within a minute.';
+      load();
+      return loadSettings();
+    }).catch(function (e) { $('saved').textContent = 'Not saved: ' + e.message; });
+  };
+
+  load().catch(function (e) { $('summary').textContent = 'Can\'t reach the tablet: ' + e.message; });
+  loadSettings();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && !busy) load(); });
+})();
+</script>
+</body>
+</html>

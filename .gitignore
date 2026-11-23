@@ -1,0 +1,11 @@
+# Build output
+build/
+release/
+*.idsig
+
+# Signing keys: never commit these. Lose yours and you can't update the app in place.
+*.keystore
+*.jks
+
+# Local Android SDK copies
+.sdk/

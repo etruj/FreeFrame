@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>FreeFrame</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif; color: #fff;
+    -webkit-user-select: none; user-select: none; cursor: none; }
+  .photo { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0; transition: opacity 1.5s ease-in-out;
+    will-change: opacity; }
+  .photo.show { opacity: 1; }
+  #vid { object-fit: contain; background: #000; }
+  #vid.fill { object-fit: cover; }
+  #vid.motion { background: transparent; }  /* a live photo's clip plays over its still */
+
+  #clock { position: absolute; left: 0; bottom: 0; padding: 60px 24px 16px 22px;
+    right: 0; background: linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0));
+    text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
+  #time { font-size: 64px; font-weight: 300; line-height: 1; }
+  #time small { font-size: 24px; margin-left: 6px; }
+  #date { font-size: 20px; margin-top: 4px; opacity: .92; }
+
+  #agenda { position: absolute; top: 0; right: 0; bottom: 0; width: 290px;
+    box-sizing: border-box; padding: 14px 16px 84px; overflow: hidden;
+    background: rgba(0,0,0,.62); transition: transform .4s ease; }
+  body.photos-only #agenda { transform: translateX(100%); }
+  .day { font-size: 14px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: #ffd27a; margin: 14px 0 4px;
+    padding-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,.22); }
+  .day:first-child { margin-top: 0; }
+  .ev { display: flex; padding: 4px 0; font-size: 17px; line-height: 1.25; }
+  .ev .t { flex: 0 0 76px; font-size: 14px; padding-top: 2px; opacity: .8;
+    white-space: nowrap; }
+  .ev .n { flex: 1; min-width: 0; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ev .loc { display: block; font-size: 13px; opacity: .65; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .note { font-size: 15px; opacity: .7; padding: 6px 0; }
+
+  /* The one control on the frame: shows or hides the calendar. */
+  #cal { position: absolute; right: 14px; bottom: 14px; width: 60px; height: 60px;
+    border-radius: 50%; border: 0; padding: 0; outline: none; color: #fff;
+    background: rgba(0,0,0,.45); -webkit-tap-highlight-color: transparent; }
+  #cal:active { background: rgba(255,255,255,.3); }
+  #cal svg { width: 30px; height: 30px; vertical-align: middle; opacity: .9; }
+  body.photos-only #cal { background: rgba(0,0,0,.28); }
+  body.photos-only #cal svg { opacity: .6; }
+
+  #msg { position: absolute; left: 0; right: 0; top: 40%; text-align: center;
+    font-size: 22px; opacity: .75; padding: 0 40px; }
+  body:not(.photos-only) #msg { right: 290px; }
+  /* Tapping a top corner shows where to add photos. */
+  .corner { position: absolute; top: 0; width: 130px; height: 130px; }
+  #cornerL { left: 0; }
+  #cornerR { right: 0; }
+  #info { position: absolute; left: 50%; top: 50%; width: 600px; margin: -120px 0 0 -300px;
+    box-sizing: border-box; padding: 26px 30px; border-radius: 18px; text-align: center;
+    background: rgba(12,12,12,.9); box-shadow: 0 6px 30px rgba(0,0,0,.6);
+    opacity: 0; visibility: hidden; transition: opacity .3s, visibility 0s .3s; }
+  #info.show { opacity: 1; visibility: visible; transition: opacity .3s; }
+  #info .h { font-size: 26px; font-weight: 500; }
+  #info .s { font-size: 17px; opacity: .7; margin-top: 8px; }
+  #info .u { font-size: 34px; font-weight: 500; color: #ffd27a; margin: 14px 0 6px;
+    letter-spacing: .01em; word-break: break-all; }
+
+  #dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    background: #000; opacity: 0; pointer-events: none;
+    transition: opacity 2s; }
+</style>
+</head>
+<body>
+<img class="photo" id="p0" alt="">
+<img class="photo" id="p1" alt="">
+<video class="photo" id="vid" muted playsinline preload="auto"></video>
+<div id="msg"></div>
+<div id="clock"><div id="time"></div><div id="date"></div></div>
+<div id="agenda"></div>
+<button id="cal" aria-label="Show or hide calendar">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/>
+    <path d="M3 10h18M8 3v4M16 3v4"/></svg>
+</button>
+<div class="corner" id="cornerL"></div>
+<div class="corner" id="cornerR"></div>
+<div id="dim"></div>
+<div id="info">
+  <div class="h">Add or remove photos and videos</div>
+  <div class="s">On a phone or computer on the same Wi-Fi, go to</div>
+  <div class="u" id="infoUrl"></div>
+  <div class="s" id="infoCount"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
+  var conf = { secondsPerPhoto: 30, shuffle: true, maxEvents: 9 };
+  var version = null, clockOffset = 0;
+  var photos = [], order = [], pos = 0, front = 0, events = [], stamps = {}, videos = {}, motions = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  function getJSON(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error(url + ' ' + r.status);
+      return r.json();
+    });
+  }
+
+  // All times are the server's wall clock, carried in the UTC fields of a
+  // Date, so the tablet's own timezone setting never matters.
+  function wall(s) {
+    var m = /^(\d+)-(\d+)-(\d+)(?:T(\d+):(\d+)(?::(\d+))?)?/.exec(s);
+    return new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)));
+  }
+  function now() { return new Date(Date.now() + clockOffset); }
+  function dayKey(d) { return d.toISOString().slice(0, 10); }
+  function fmtTime(d) {
+    var h = d.getUTCHours(), m = d.getUTCMinutes();
+    return [(h % 12) || 12, (m < 10 ? '0' : '') + m, h < 12 ? 'AM' : 'PM'];
+  }
+
+  // ---- config, self-reload, night dimming
+  function loadConfig() {
+    return getJSON('/api/config').then(function (c) {
+      if (version && c.version !== version) { location.reload(); return; }
+      version = c.version;
+      conf = c;
+      clockOffset = wall(c.now).getTime() - Date.now();
+      $('clock').style.display = c.showClock === false ? 'none' : '';
+      applyBrightness();
+    });
+  }
+  function minutes(s) {
+    var m = /^(\d+):(\d+)$/.exec(s || '');
+    return m ? m[1] * 60 + +m[2] : null;
+  }
+  // At night any touch brings the screen up for a minute.
+  var wokenUntil = 0;
+  document.addEventListener('touchstart', function () {
+    var asleep = Date.now() >= wokenUntil;
+    wokenUntil = Date.now() + 60000;
+    if (asleep) applyBrightness();
+    setTimeout(applyBrightness, 60500);
+  }, true);
+  function applyBrightness() {
+    var a = minutes(conf.nightStart), b = minutes(conf.nightEnd);
+    var n = now(), t = n.getUTCHours() * 60 + n.getUTCMinutes();
+    var night = a !== null && b !== null && (a < b ? (t >= a && t < b) : (t >= a || t < b)) &&
+      Date.now() >= wokenUntil;
+    if (window.Frame && Frame.setBrightness) {
+      // The tablet app dims the backlight itself.
+      Frame.setBrightness(night ? conf.nightBrightness : conf.dayBrightness);
+      // At the lowest backlight a dark veil takes it down further still.
+      $('dim').style.opacity = night && conf.nightBrightness <= 0.02 ? 0.5 : 0;
+    } else {
+      $('dim').style.opacity = night ? 0.85 : 0;
+    }
+  }
+
+  // ---- clock
+  function tick() {
+    var n = now(), t = fmtTime(n);
+    $('time').innerHTML = t[0] + ':' + t[1] + '<small>' + t[2] + '</small>';
+    $('date').textContent = DAYS[n.getUTCDay()] + ', ' + MONTHS[n.getUTCMonth()] + ' ' + n.getUTCDate();
+  }
+
+  // ---- slideshow
+  function reshuffle() {
+    order = photos.slice();
+    if (conf.shuffle) {
+      for (var i = order.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1)), x = order[i];
+        order[i] = order[j]; order[j] = x;
+      }
+    }
+    pos = 0;
+  }
+  function manageUrl() { return conf.manageUrl || 'this tablet\'s address, port 8080'; }
+  function loadPhotos() {
+    return getJSON('/api/photos').then(function (r) {
+      videos = {}; motions = {};
+      var names = r.photos.map(function (p) {
+        stamps[p.name] = p.mtime;
+        if (p.video) videos[p.name] = 1;
+        if (p.motion) motions[p.name] = 1;
+        return p.name;
+      });
+      var nv = Object.keys(videos).length, np = names.length - nv;
+      var had = {}, alive = {};
+      photos.forEach(function (n) { had[n] = 1; });
+      names.forEach(function (n) { alive[n] = 1; });
+      var fresh = names.filter(function (n) { return !had[n]; });
+      var wasEmpty = !photos.length;
+      photos = names;
+      // Deleted photos leave the queue; newly added ones are shown next.
+      var rest = order.slice(pos).filter(function (n) { return alive[n]; });
+      if (wasEmpty || (!rest.length && !fresh.length)) { reshuffle(); }
+      else { order = fresh.concat(rest); pos = 0; }
+      $('infoCount').textContent = np + (np === 1 ? ' photo' : ' photos') +
+        (nv ? ' and ' + nv + (nv === 1 ? ' video' : ' videos') : '') + ' on the frame';
+      $('msg').innerHTML = photos.length ? '' : 'No photos or videos yet.<br>To add some, go to <b>' + esc(manageUrl()) +
+        '</b><br>on a phone or computer on the same Wi-Fi.';
+      if (!photos.length) { clearTimeout(timer); stopVideo(); $('p0').className = $('p1').className = 'photo'; }
+      else if (wasEmpty) { nextItem(); }
+    });
+  }
+  // Photos picked with "Show next" on the manager page go to the front of
+  // the queue, after whatever is on screen now.
+  var nextSeen = null;
+  function loadNext() {
+    return getJSON('/api/next').then(function (r) {
+      if (nextSeen === null || r.id === nextSeen) { nextSeen = r.id; return; }  // old asks don't replay on reload
+      nextSeen = r.id;
+      var have = {};
+      photos.forEach(function (n) { have[n] = 1; });
+      var want = r.names.filter(function (n) { return have[n]; });
+      if (!want.length) return;
+      var rest = order.slice(pos).filter(function (n) { return want.indexOf(n) < 0; });
+      order = want.concat(rest);
+      pos = 0;
+    });
+  }
+  function imgUrl(rel) {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    return '/img/' + rel.split('/').map(encodeURIComponent).join('/') +
+      '?w=' + Math.round(window.innerWidth * dpr) + '&h=' + Math.round(window.innerHeight * dpr) +
+      '&v=' + (stamps[rel] || 0);
+  }
+  // One timer moves the show along: a photo stays for the chosen time, a
+  // video until it ends.
+  var timer = null, playing = 0;
+  function after(seconds) {
+    clearTimeout(timer);
+    timer = setTimeout(nextItem, seconds * 1000);
+  }
+  function nextItem() {
+    clearTimeout(timer);
+    if (!order.length) return;
+    if (pos >= order.length) reshuffle();
+    var rel = order[pos++];
+    if (videos[rel]) showVideo(rel); else showPhoto(rel);
+  }
+  function showPhoto(rel) {
+    var back = $('p' + (1 - front)), old = $('p' + front);
+    back.onload = function () {
+      back.className = 'photo show';
+      old.className = 'photo';
+      front = 1 - front;
+      stopVideo();
+      after(conf.secondsPerPhoto || 30);
+      if (motions[rel]) playMotion(rel);
+    };
+    back.onerror = function () { after(2); };
+    back.src = imgUrl(rel);
+    after(30);  // if it never loads
+  }
+  function showVideo(rel) {
+    var v = $('vid'), mine = ++playing;
+    v.onloadedmetadata = function () {
+      // Like photos: fill the screen when the shape is close to it.
+      var ratio = (v.videoWidth / v.videoHeight) / (window.innerWidth / window.innerHeight);
+      v.className = v.className.replace(' fill', '') + (ratio >= 0.8 && ratio <= 1.25 ? ' fill' : '');
+    };
+    v.onplaying = function () {
+      if (mine !== playing) return;
+      v.className = 'photo show' + (/ fill/.test(v.className) ? ' fill' : '');
+      $('p0').className = $('p1').className = 'photo';
+    };
+    // A video that stops moving for 20 seconds is skipped.
+    v.ontimeupdate = function () { if (mine === playing) after(20); };
+    v.onended = function () { if (mine === playing) nextItem(); };
+    v.onerror = function () { if (mine === playing) after(2); };
+    v.muted = true;
+    v.src = '/orig/' + rel.split('/').map(encodeURIComponent).join('/') + '?v=' + (stamps[rel] || 0);
+    var p = v.play();
+    if (p && p.catch) p.catch(function () {});
+    after(20);
+  }
+  // A live / motion photo: once the still is up, its short clip plays over
+  // it one time and fades back to the still.
+  function playMotion(rel) {
+    var v = $('vid'), mine = ++playing;
+    function release() {
+      if (mine !== playing) return;
+      v.className = 'photo motion';
+      setTimeout(function () {
+        if (mine !== playing) return;
+        v.pause(); v.removeAttribute('src'); v.load(); v.className = 'photo';
+      }, 1600);
+    }
+    setTimeout(function () {
+      if (mine !== playing) return;
+      v.className = 'photo motion';
+      v.onloadedmetadata = function () {
+        var ratio = (v.videoWidth / v.videoHeight) / (window.innerWidth / window.innerHeight);
+        if (mine === playing && ratio >= 0.8 && ratio <= 1.25) v.className += ' fill';
+      };
+      v.onplaying = function () {
+        if (mine !== playing) return;
+        v.className += ' show';
+        // the photo's own time starts once the clip is over
+        if (v.duration > 0 && v.duration < 30) after(v.duration + (conf.secondsPerPhoto || 30));
+      };
+      v.ontimeupdate = null;
+      v.onended = v.onerror = release;
+      v.muted = true;
+      v.src = '/motion/' + rel.split('/').map(encodeURIComponent).join('/') + '?v=' + (stamps[rel] || 0);
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
+    }, 2500);
+  }
+  function stopVideo() {
+    var v = $('vid'), mine = ++playing;
+    if (!v.getAttribute('src')) return;
+    v.className = 'photo';
+    setTimeout(function () {  // after the fade, let go of the video decoder
+      if (mine !== playing) return;
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+    }, 1600);
+  }
+
+  // ---- agenda
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function loadEvents() {
+    return getJSON('/api/events').then(function (r) {
+      events = r.events;
+      $('cal').style.display = r.configured ? '' : 'none';
+      if (!r.configured) showCalendar(false);
+      renderAgenda();
+    });
+  }
+  function renderAgenda() {
+    var n = now(), today = dayKey(n);
+    var tomorrow = dayKey(new Date(n.getTime() + 864e5));
+    var rows = [], lastDay = null, count = 0;
+    for (var i = 0; i < events.length && count < conf.maxEvents; i++) {
+      var e = events[i];
+      if (!e.allDay && wall(e.end) < n && e.end.slice(0, 10) <= today) continue; // already over
+      var day = e.start.slice(0, 10);
+      if (day < today) day = today;  // multi-day event already under way
+      if (day !== lastDay) {
+        var d = wall(day);
+        var label = day === today ? 'Today' : day === tomorrow ? 'Tomorrow'
+          : DAYS[d.getUTCDay()].slice(0, 3) + ', ' + MONTHS[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCDate();
+        rows.push('<div class="day">' + label + '</div>');
+        lastDay = day;
+      }
+      var when = 'All day';
+      if (!e.allDay) { var t = fmtTime(wall(e.start)); when = t[0] + ':' + t[1] + ' ' + t[2]; }
+      else if (e.end > e.start) {
+        var last = wall(e.end);
+        when = 'to ' + MONTHS[last.getUTCMonth()].slice(0, 3) + ' ' + last.getUTCDate();
+      }
+      rows.push('<div class="ev"><div class="t">' + when + '</div><div class="n">' + esc(e.title) +
+        (e.location ? '<span class="loc">' + esc(e.location) + '</span>' : '') + '</div></div>');
+      count++;
+    }
+    $('agenda').innerHTML = rows.length ? rows.join('')
+      : '<div class="day">Calendar</div><div class="note">Nothing coming up this week.</div>';
+  }
+
+  // A tap on a top corner shows the address of the photo manager.
+  // The address is looked up again on each tap, in case the router changed it.
+  var infoTimer = null;
+  function showInfo() {
+    $('infoUrl').textContent = manageUrl();
+    $('info').className = 'show';
+    quiet(loadConfig()).then(function () { $('infoUrl').textContent = manageUrl(); });
+    clearTimeout(infoTimer);
+    infoTimer = setTimeout(hideInfo, 45000);
+  }
+  function hideInfo() { $('info').className = ''; }
+  $('cornerL').addEventListener('click', showInfo);
+  $('cornerR').addEventListener('click', showInfo);
+  $('info').addEventListener('click', hideInfo);
+
+  // The calendar button; the choice sticks across reloads and restarts.
+  function showCalendar(on) {
+    document.body.className = on ? '' : 'photos-only';
+  }
+  function remembered() {
+    try { return localStorage.getItem('calendar') === 'on'; } catch (e) { return false; }
+  }
+  showCalendar(remembered());
+  $('cal').addEventListener('click', function () {
+    var on = document.body.className !== '';
+    showCalendar(on);
+    try { localStorage.setItem('calendar', on ? 'on' : 'off'); } catch (e) {}
+  });
+
+  function quiet(p) { return p.catch(function (e) { console.log(e); }); }
+  function every(fn, seconds) { setInterval(function () { quiet(fn()); }, seconds * 1000); }
+
+  tick();
+  quiet(loadConfig()).then(function () {
+    tick();
+    setInterval(tick, 5000);
+    setInterval(applyBrightness, 60000);
+    setInterval(renderAgenda, 60000);
+    quiet(loadEvents());
+    return quiet(loadPhotos());
+  }).then(function () {
+    every(loadConfig, 60);
+    every(loadPhotos, 20);
+    quiet(loadNext());
+    every(loadNext, 3);
+    every(loadEvents, 300);
+  });
+})();
+</script>
+</body>
+</html>
